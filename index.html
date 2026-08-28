@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#121212">
-    <title>デイトレード・サバイバル：キャリアモード</title>
+    <title>デイトレード・サバイバル：キャリアモード完全版</title>
     
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -120,7 +120,7 @@
 <div class="container">
     <!-- セットアップ画面 -->
     <div id="setup-screen" class="active-screen">
-        <h1>デイトレード・サバイバル</h1>
+        <h1>デイトレード・サバイバル 完全版</h1>
         <p style="color: #bbb;">チャートの波形とニュースから相場の裏側を読み解け。<br>※保有ポジションは翌日への持ち越しが可能です。</p>
         
         <div class="input-group">
@@ -219,7 +219,6 @@
         { time: 11, name: "中国GDP 発表", targetTag: "Oil", isRandomDir: true, desc: "資源関連が乱高下" },
         { time: 13, name: "OPEC臨時総会", targetTag: "Oil", isRandomDir: true, desc: "原油価格が大きく動く" },
         { time: 14, name: "米国雇用統計(先行発表)", targetTag: "JPY", isRandomDir: true, desc: "ドル円が激しく動く" },
-        // 🚨 修正: 確定で下落するバグ(エクスプロイト)を潰し、乱高下する仕様に変更
         { time: 12, name: "大手取引所ハッキング疑惑", targetTag: "Crypto", isRandomDir: true, desc: "仮想通貨市場に激震（乱高下）" }
     ];
 
@@ -247,7 +246,7 @@
 
     let equityHistory = []; let timeLabels = [];
     let equityChartInstance = null;
-    const SAVE_KEY = "dayTradeGameSave_v31_ev_fixed"; 
+    const SAVE_KEY = "dayTradeGameSave_v40_fx_bs_fixed"; 
 
     let tvChart = null;
     let tvSeries = null;
@@ -255,8 +254,6 @@
     let chartResizeObserver = null;
 
     function getMaxLeverage() { return upgrades.maxLeverageLevel === 2 ? 100 : (upgrades.maxLeverageLevel === 1 ? 50 : 25); }
-    
-    // 🚨 修正: 手数料率のベースを調整。建玉に対して0.05%かかる仕様に（スプレッド代わり）
     function getFeeRate() { return upgrades.feeLevel === 2 ? 0.0003 : (upgrades.feeLevel === 1 ? 0.0004 : 0.0005); }
     
     function formatMoney(value) { return Math.trunc(value).toLocaleString('ja-JP'); }
@@ -480,7 +477,6 @@
         
         currentMarket = selected.map((asset, index) => {
             let role = rolesPool[index];
-            // 🚨 修正: 50%の確率でニュースがガセ（罠）になる
             let isFake = Math.random() < 0.5; 
             let news = generateNews(asset, role, isFake);
             
@@ -706,7 +702,6 @@
         let sl = !isNaN(slInput) && slInput > 0 ? slInput * multiplier : null;
 
         let available = getAvailableFunds();
-        // 🚨 修正: 手数料は「投資額 × レバレッジ（建玉）」に対してかかるように変更
         let fee = investAmt * leverage * getFeeRate();
         let totalRequiredMargin = investAmt + fee;
 
@@ -770,7 +765,6 @@
     }
 
     function calculateChangeWithMacro(asset, macro) {
-        // 🚨 修正: 本物のニュースを見極めても、素直に動く確率は56%に設定（期待値をシビアに）
         let isWin = Math.random() < 0.56; 
         let dir = Math.random() > 0.5 ? 1 : -1;
         if (asset.role === "Winner") dir = isWin ? 1 : -1;
@@ -832,15 +826,18 @@
             let maxRangeMultiplier = 1.5;
 
             if (bsTriggered && index === todayBlackSwan.targetId) {
+                // 💡 追加：為替の場合はダメージを「5分の1（0.2倍）」に軽減する
+                let bsMultiplier = (asset.type === "Forex") ? 0.2 : 1.0; 
+                
                 if (todayBlackSwan.type === "crash") {
-                    changePct = -(0.25 + Math.random() * 0.25); 
+                    changePct = -(0.25 + Math.random() * 0.25) * bsMultiplier; 
                     bsNewsText = `先ほどの『${asset.name}』の異常な大暴落は、隠蔽されていた致命的な不正疑惑が機関投資家の間でリークされたためでした。市場はパニック状態です。`;
                 } else if (todayBlackSwan.type === "spike") {
-                    changePct = (0.25 + Math.random() * 0.25); 
+                    changePct = (0.25 + Math.random() * 0.25) * bsMultiplier; 
                     bsNewsText = `先ほどの『${asset.name}』の歴史的大高騰は、謎のオイルマネーファンドによる敵対的買収の極秘情報が漏れたためと判明しました！`;
                 } else {
-                    changePct = (Math.random() > 0.5 ? 1 : -1) * (0.20 + Math.random() * 0.20);
-                    maxRangeMultiplier = 30.0; 
+                    changePct = (Math.random() > 0.5 ? 1 : -1) * (0.20 + Math.random() * 0.20) * bsMultiplier;
+                    maxRangeMultiplier = (asset.type === "Forex") ? 10.0 : 30.0; // 乱高下のヒゲもマイルドに
                     bsNewsText = `先ほどの『${asset.name}』の不可解な乱高下は、大手AIトレードシステムの暴走（フラッシュ・クラッシュ）が原因でした。注文が激しく交錯し大混乱を招きました。`;
                 }
             }
